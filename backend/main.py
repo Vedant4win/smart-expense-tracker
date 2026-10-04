@@ -257,9 +257,9 @@ def get_spending_insights(user_id: str):
             )
         except Exception as e:
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                print("Insights quota hit! Falling back to alternate model...")
+                print("Insights quota hit! Falling back to lite model...")
                 ai_response = client.models.generate_content(
-                    model="gemini-1.5-pro", # Set this to the model string that worked for your receipts
+                    model="gemini-3.5-flash-lite", # <--- Updated to the working fallback model
                     contents=prompt
                 )
             else:
@@ -268,6 +268,8 @@ def get_spending_insights(user_id: str):
         return {"status": "success", "insights": ai_response.text.strip()}
         
     except Exception as e:
+        # Print the actual error to the Render terminal so it's easy to debug
+        print(f"INSIGHTS ERROR: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 @app.delete("/api/transactions/{transaction_id}")
 def delete_transaction(transaction_id: str):
