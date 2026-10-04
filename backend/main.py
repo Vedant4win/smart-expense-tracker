@@ -249,11 +249,21 @@ def get_spending_insights(user_id: str):
         Write a concise, 2-to-3 sentence summary of their spending habits based on where their money is going, and offer one quick, actionable piece of financial advice. Keep the tone professional but encouraging. Do not use bolding or markdown formatting.
         """
         
-        # Ask Gemini to analyze the habits
-        ai_response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
+        # Ask Gemini to analyze the habits with quota fallback
+        try:
+            ai_response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+        except Exception as e:
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                print("Insights quota hit! Falling back to alternate model...")
+                ai_response = client.models.generate_content(
+                    model="gemini-1.5-pro", # Set this to the model string that worked for your receipts
+                    contents=prompt
+                )
+            else:
+                raise e
         
         return {"status": "success", "insights": ai_response.text.strip()}
         
