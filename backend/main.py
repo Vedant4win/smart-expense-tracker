@@ -10,6 +10,10 @@ from datetime import datetime
 from analytics import run_statistical_checks
 
 app = FastAPI(title="Smart Expense Tracker API")
+@app.get("/")
+@app.head("/")
+def health_check():
+    return {"status": "backend is awake"}
 
 app.add_middleware(
     CORSMiddleware,
