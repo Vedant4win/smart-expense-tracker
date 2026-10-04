@@ -69,8 +69,8 @@ def get_users():
 @app.post("/api/receipts/process")
 async def process_receipt(file: UploadFile = File(...)):
     if not client:
-         raise HTTPException(status_code=500, detail="Gemini API key is not configured.")
-            
+        raise HTTPException(status_code=500, detail="Gemini API key is not configured.")
+
     try:
         # Read the raw image bytes from the uploaded file
         image_bytes = await file.read()
@@ -86,25 +86,43 @@ async def process_receipt(file: UploadFile = File(...)):
         }
         Return ONLY the raw JSON object. Do not include markdown formatting, backticks, or extra text.
         """
-        
-        # Call the Vision API using the modern genai client and updated model
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[
-                prompt,
-                types.Part.from_bytes(
-                    data=image_bytes,
-                    mime_type=file.content_type
+
+        # Call the Vision API using the modern genai client with quota fallback
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    prompt,
+                    types.Part.from_bytes(
+                        data=image_bytes,
+                        mime_type=file.content_type
+                    )
+                ]
+            )
+        except Exception as e:
+            # Check if the error is a Quota/Rate Limit exception
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                print("2.5-flash quota hit! Falling back to gemini-1.5-flash...")
+                response = client.models.generate_content(
+                    model="gemini-1.5-flash",
+                    contents=[
+                        prompt,
+                        types.Part.from_bytes(
+                            data=image_bytes,
+                            mime_type=file.content_type
+                        )
+                    ]
                 )
-            ]
-        )
-        
+            else:
+                # If it's a different error (like a bad image file), raise it normally
+                raise e
+
         # Log the raw text to the terminal for debugging
         raw_text = response.text.strip()
         print("\n--- RAW AI RESPONSE ---")
         print(raw_text)
         print("-----------------------\n")
-        
+
         # Aggressively strip Markdown code blocks if the AI included them
         if raw_text.startswith("```json"):
             raw_text = raw_text[7:]
@@ -113,14 +131,14 @@ async def process_receipt(file: UploadFile = File(...)):
             
         if raw_text.endswith("```"):
             raw_text = raw_text[:-3]
-            
+
         # Parse the cleaned text into a Python dictionary
         extracted_data = json.loads(raw_text.strip())
-        
+
         return {"status": "success", "parsed_data": extracted_data}
-        
+
     except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="AI failed to return valid JSON. Raw output printed in terminal.")
+        raise HTTPException(status_code=500, detail="AI failed to return valid JSON. Raw output printed to terminal.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
