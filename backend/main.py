@@ -102,9 +102,9 @@ async def process_receipt(file: UploadFile = File(...)):
         except Exception as e:
             # Check if the error is a Quota/Rate Limit exception
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                print("2.5-flash quota hit! Falling back to gemini-1.5-pro...")
+                print("2.5-flash quota hit! Falling back to gemini-3.5-flash-lite...")
                 response = client.models.generate_content(
-                    model="gemini-1.5-pro",
+                    model="gemini-3.5-flash-lite",
                     contents=[
                         prompt,
                         types.Part.from_bytes(
