@@ -241,3 +241,14 @@ def get_spending_insights(user_id: str):
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+@app.delete("/api/transactions/{transaction_id}")
+def delete_transaction(transaction_id: str):
+    try:
+        response = supabase.table("transactions")\
+            .delete()\
+            .eq("transaction_id", transaction_id)\
+            .execute()
+            
+        return {"status": "success", "message": "Transaction deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

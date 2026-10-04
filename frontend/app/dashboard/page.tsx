@@ -2,71 +2,83 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { LayoutDashboard, AlertTriangle, ArrowLeft, Sparkles } from 'lucide-react';
+import { LayoutDashboard, AlertTriangle, ArrowLeft, Sparkles, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '../../utils/supabase';
 import { useRouter } from 'next/navigation';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-
 export default function Dashboard() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
-  const [insights, setInsights] = useState<string | null>(null); // <-- Add this
+  const [insights, setInsights] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  
-
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          router.push('/login');
-          return;
-        }
-
-        const response = await axios.get(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/transactions?user_id=${session.user.id}`
-        );
-        const txs = response.data.data;
-        setTransactions(txs);
-
-        // Group spend by date for the chart
-        const grouped: { [key: string]: number } = {};
-        txs.forEach((tx: any) => {
-          grouped[tx.date] = (grouped[tx.date] || 0) + Number(tx.amount);
-        });
-
-        const formatted = Object.keys(grouped).map(date => ({
-          date,
-          amount: parseFloat(grouped[date].toFixed(2))
-        })).reverse();
-
-        setChartData(formatted);
-        // ... inside fetchTransactions, right below setChartData(formatted); ...
-        
-        // Fetch AI Insights
-        try {
-          const insightsResponse = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/insights?user_id=${session.user.id}`
-          );
-          setInsights(insightsResponse.data.insights);
-        } catch (insightErr) {
-          console.error("Failed to fetch insights");
-        }
-
-      } catch (err: any) {
-        setError("Failed to load transactions.");
-      } finally {
-        setLoading(false);
+  // 1. Define fetchTransactions outside useEffect so it can be reused by handleDelete
+  const fetchTransactions = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
       }
-    };
 
+      // Fetch transactions
+      const response = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/transactions?user_id=${session.user.id}`
+      );
+      const txs = response.data.data;
+      setTransactions(txs);
+
+      // Group spend by date for the chart
+      const grouped: { [key: string]: number } = {};
+      txs.forEach((tx: any) => {
+        grouped[tx.date] = (grouped[tx.date] || 0) + Number(tx.amount);
+      });
+
+      const formatted = Object.keys(grouped).map(date => ({
+        date,
+        amount: parseFloat(grouped[date].toFixed(2))
+      })).reverse();
+
+      setChartData(formatted);
+      
+      // Fetch AI Insights
+      try {
+        const insightsResponse = await axios.get(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/insights?user_id=${session.user.id}`
+        );
+        setInsights(insightsResponse.data.insights);
+      } catch (insightErr) {
+        console.error("Failed to fetch insights", insightErr);
+      }
+
+    } catch (err: any) {
+      setError("Failed to load transactions.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. Call fetchTransactions when the component mounts
+  useEffect(() => {
     fetchTransactions();
   }, [router]);
+
+  // 3. Define handleDelete (now properly scoped)
+  const handleDelete = async (transactionId: string) => {
+    const confirmDelete = window.confirm("Are you sure you want to delete this expense?");
+    if (!confirmDelete) return;
+
+    try {
+      await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/api/transactions/${transactionId}`);
+      fetchTransactions(); // Immediately refreshes the chart and table data
+    } catch (error) {
+      console.error("Failed to delete transaction", error);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-gray-50 p-8 font-sans text-gray-900">
@@ -90,7 +102,7 @@ export default function Dashboard() {
           <div className="text-center py-10 text-gray-500">No transactions found for this account.</div>
         ) : (
           <>
-          {/* AI Insights Banner */}
+            {/* AI Insights Banner */}
             {insights && (
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100 mb-8">
                 <h2 className="text-md font-semibold text-blue-900 mb-2 flex items-center gap-2">
@@ -102,7 +114,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            
             {/* Spending Chart */}
             <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
               <h2 className="text-md font-semibold text-gray-700 mb-4">Spending Over Time</h2>
@@ -128,7 +139,9 @@ export default function Dashboard() {
                     <th className="p-4 font-semibold rounded-tl-lg">Date</th>
                     <th className="p-4 font-semibold">Merchant</th>
                     <th className="p-4 font-semibold">Amount</th>
-                    <th className="p-4 font-semibold rounded-tr-lg">Status</th>
+                    <th className="p-4 font-semibold">Status</th>
+                    {/* Added a 5th column header for the delete button to keep the table aligned */}
+                    <th className="p-4 font-semibold rounded-tr-lg text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -147,6 +160,15 @@ export default function Dashboard() {
                             Normal
                           </span>
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button 
+                          onClick={() => handleDelete(tx.transaction_id)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-md transition-colors"
+                          title="Delete Expense"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
